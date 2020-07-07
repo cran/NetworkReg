@@ -1,0 +1,2 @@
+exportPattern(net.gen.from.P,SP.Inf)
+import(stats,Matrix,RSpectra,randnet)
