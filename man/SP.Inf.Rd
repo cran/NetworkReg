@@ -63,12 +63,12 @@ A list object with
 %% ...
 }
 \references{
-Can M. Le and Tianxi Li.  Linear regression and its inference on noisy network-linked data. arXiv:2007.00803
+Le, C. M., & Li, T. (2022). Linear regression and its inference on noisy network-linked data. Journal of the Royal Statistical Society Series B: Statistical Methodology, 84(5), 1851-1885.
 }
 \author{
 Can M. Le and  Tianxi Li.\cr
 
-Maintainer: Tianxi Li <tianxili@virginia.edu>
+Maintainer: Tianxi Li <tianxili@umn.edu>
 }
 
 \examples{

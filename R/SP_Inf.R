@@ -46,7 +46,7 @@ SP.Inf <- function(X,Y,A,K,r=NULL,sigma2=NULL,thr=NULL,alpha.CI=0.05,boot.thr=TR
       P0 <- P0/mean(rowSums(P0))*mean(rowSums(A))
       eig.P0 <- eigs_sym(P0,k=K)
       fake.svd <- svd(t(R)%*%matrix(eig.P0$vectors[,1:K],ncol=K))
-      print("Use bootstrapping to find r-threshold....")
+      message("Use bootstrapping to find r-threshold....")
       sim.s <- matrix(0,boot.n,min(p,K))
       for(II in 1:boot.n){
         A.sim <- net.gen.from.P(P0)
@@ -56,7 +56,7 @@ SP.Inf <- function(X,Y,A,K,r=NULL,sigma2=NULL,thr=NULL,alpha.CI=0.05,boot.thr=TR
       }
       
       thr <- 1-max(abs(t(sim.s)-fake.svd$d))
-      print(paste("Select r by threshold",thr))
+      message(paste("Select r by threshold",thr))
       
     }else{
       dhat <- max(rowSums(A))
@@ -64,13 +64,11 @@ SP.Inf <- function(X,Y,A,K,r=NULL,sigma2=NULL,thr=NULL,alpha.CI=0.05,boot.thr=TR
       if(thr < 0.05){
         thr <- 0.05
       }
-      print(paste("Select r by asymptotic threshold",thr))
+      message(paste("Select r by asymptotic threshold",thr))
     }
   }
-    print("Observed singular values are ")
-    print(hat.SVD$d)
     r <- sum(hat.SVD$d>=thr)
-    print(paste("Select r =",r))
+    message(paste("Select r =",r))
   }
   if(r >0){
   Z <- cbind(R.curl[,-(1:r)],U.curl[,-(1:r)])
@@ -125,8 +123,112 @@ SP.Inf <- function(X,Y,A,K,r=NULL,sigma2=NULL,thr=NULL,alpha.CI=0.05,boot.thr=TR
   }
   return(list(beta=beta.hat,alpha=alpha.hat,theta=theta.hat,r=r,
               sigma2=sigma2.hat,cov.hat=cov.hat,coef.mat=coef.mat,
-              fitted=fitted.Y,chisq.val=chisq.val,chisq.p=chisq.pval))
+              fitted=fitted.Y,chisq.val=chisq.val,chisq.p=chisq.pval,thr=thr,H=H))
 }
+
+
+
+
+
+
+SP.semi.Inf <- function(X,Y,A,K,r=NULL,sigma2=NULL,thr=NULL,boot.thr=TRUE,boot.n= 50){
+  n <- nrow(X)
+  p <- ncol(X)
+  N <- length(Y)
+  if(N>= n){
+    message("Not correct dimension for semi-supervised version....")
+    return(NA)
+  }
+  eigen.A <- eigs_sym(A=A,k=K)
+  X.svd <- svd(X)
+  x.proj <- X.svd$v%*%(t(X.svd$u)/X.svd$d)
+  R <- X.svd$u
+  Uhat <- matrix(eigen.A$vectors[,1:K],ncol=K)
+  hat.SVD <- svd(t(R)%*%Uhat,nv=K,nu=p)
+  Vhat <- hat.SVD$v
+  U.curl <- Uhat%*%Vhat
+  R.curl <- R%*%hat.SVD$u
+  if(is.null(r)){
+    if(is.null(thr)){
+      if(boot.thr){
+        P0 <- eigen.A$vectors %*%t(eigen.A$vectors*eigen.A$values)
+        P0[P0>1] <- 1
+        P0[P0<0] <- 0
+        P0 <- P0/mean(rowSums(P0))*mean(rowSums(A))
+        eig.P0 <- eigs_sym(P0,k=K)
+        fake.svd <- svd(t(R)%*%matrix(eig.P0$vectors[,1:K],ncol=K))
+        message("Use bootstrapping to find r-threshold....")
+        sim.s <- matrix(0,boot.n,min(p,K))
+        for(II in 1:boot.n){
+          A.sim <- net.gen.from.P(P0)
+          eig.A.sim <- eigs_sym(A.sim,k=K)
+          sim.svd <- svd(t(R)%*%matrix(eig.A.sim$vectors[,1:K],ncol=K))
+          sim.s[II,] <- sim.svd$d
+        }
+        
+        thr <- 1-max(abs(t(sim.s)-fake.svd$d))
+        message(paste("Select r by threshold",thr))
+        
+      }else{
+        dhat <- max(rowSums(A))
+        thr <- 1- 4*sqrt(p*K*log(n))/dhat
+        if(thr < 0.05){
+          thr <- 0.05
+        }
+        message(paste("Select r by asymptotic threshold",thr))
+      }
+    }
+    r <- sum(hat.SVD$d>=thr)
+    message(paste("Select r =",r))
+  }
+  if(r >0){
+    W.basis <- matrix(R.curl[,1:r],ncol=r)
+    W.basis.sub <- W.basis[1:N,]
+    theta.curl <- solve(t(W.basis.sub)%*%W.basis.sub,t(W.basis.sub)%*%Y)
+    theta.hat <- X.svd$v%*%(hat.SVD$u[,1:r]/X.svd$d)%*%theta.curl
+    Y.res <- Y - W.basis.sub%*%theta.curl
+  }else{
+    theta.hat <- matrix(0,nrow=p,ncol=1)
+    Y.res <- Y
+  }
+  if((p > r)&&(K>r)){
+    res.basis <- cbind(R.curl[,(r+1):p],U.curl[,(r+1):K])
+    res.basis.sub <- res.basis[1:N,]
+    res.coef <- solve(t(res.basis.sub)%*%res.basis.sub,t(res.basis.sub)%*%Y.res)
+    beta.curl <- matrix(res.coef[1:(p-r)],ncol=1)
+    gamma.curl <- matrix(res.coef[-(1:(p-r))],ncol=1)
+    beta.hat <- X.svd$v%*%(matrix(hat.SVD$u[,(r+1):p],ncol=p-r)/X.svd$d)%*%beta.curl
+    gamma.hat <- matrix(Vhat[,(r+1):K],ncol=K-r)%*%gamma.curl
+  }
+  if((p > r)&&(K==r)){
+    gamma.hat <- matrix(0,nrow=K,ncol=1)
+    res.basis <- matrix(R.curl[,(r+1):p],ncol=p-r)
+    res.basis.sub <- res.basis[1:N,]
+    res.coef <- solve(t(res.basis.sub)%*%res.basis.sub,t(res.basis.sub)%*%Y.res)
+    beta.curl <- res.coef
+    beta.hat <- X.svd$v%*%(matrix(hat.SVD$u[,(r+1):p],ncol=p-r)/X.svd$d)%*%beta.curl
+  }
+  if((p == r)&&(K>r)){
+    res.basis <- matrix(U.curl[,(r+1):K],ncol=K-r)
+    res.basis.sub <- res.basis[1:N,]
+    res.coef <- solve(t(res.basis.sub)%*%res.basis.sub,t(res.basis.sub)%*%Y.res)
+    gamma.curl <- res.coef
+    beta.hat <- matrix(0,nrow=p,ncol=1)
+    gamma.hat <- matrix(Vhat[,(r+1):K],ncol=K-r)%*%gamma.curl
+  }
+  if((p == r)&&(K==r)){
+    gamma.hat <- matrix(0,nrow=K,ncol=1)
+    beta.hat <- matrix(0,nrow=p,ncol=1)
+  }
+  fitted.Y <- Y-Y.res + X[1:N,]%*%beta.hat + Uhat[1:N,]%*%gamma.hat
+  residual <- Y-fitted.Y
+  full.alpha.hat <- Uhat%*%gamma.hat
+  alpha.hat <- full.alpha.hat[1:N,]
+  full.fitted <- X%*%beta.hat + X%*%theta.hat + full.alpha.hat
+  return(list(beta=beta.hat,alpha=alpha.hat,theta=theta.hat,r=r,
+              fitted=fitted.Y,residual=residual,full.alpha=full.alpha.hat,full.fitted=full.fitted))
+}
+
 
 
 

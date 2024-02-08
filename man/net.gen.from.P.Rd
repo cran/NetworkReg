@@ -30,5 +30,5 @@ An adjacency matrix
 \author{
 Can M. Le and  Tianxi Li.\cr
 
-Maintainer: Tianxi Li <tianxili@virginia.edu>
+Maintainer: Tianxi Li <tianxili@umn.edu>
 }
